@@ -1,0 +1,452 @@
+---
+title: "Regression Model(Q2)"
+author: "Donghyun Kim"
+date: "2025-12-06"
+output: html_document
+---
+
+```{css, echo=FALSE}
+body { font-size: 12px; line-height: 1.2; }
+
+/* 제목 크기 */
+h1.title, h1 { font-size: 18px; margin-bottom: .5em; }
+h2 { font-size: 14px; margin-top: .8em; margin-bottom: .4em; }
+h3 { font-size: 12px; }
+
+/* 문단/리스트 간격 */
+p { margin: .4em 0; }
+ul, ol { margin-top: .3em; margin-bottom: .3em; }
+
+/* 코드 블록/출력 */
+pre, code, pre code, .sourceCode pre {
+  font-size: 10px !important;
+  line-height: 1.25;
+}
+.sourceCode { max-height: 350px; overflow: auto; }
+
+/* 표/캡션 */
+table { font-size: 10px; }
+caption, .caption { font-size: 11px; }
+
+/* 이미지 기본 축소 */
+img { max-width: 90%; }
+
+/* 인쇄(PDF로 저장) 여백 줄이기 */
+@media print {
+  @page { margin: 12mm; }
+  body { -webkit-print-color-adjust: exact; }
+}```
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, load packages}
+# load packages
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(car)
+library(MASS)
+```
+
+
+```{r, echo=FALSE}
+trips_2019 <- readRDS("trips_2019.rds")
+trips_2019_nolog <- readRDS("trips_2019_nolog.rds")
+```
+
+# Question 2.
+
+**① Raw model**
+
+```{r, raw model with no transformation}
+
+## Check raw model results with no transformation
+model_raw_dur <- lm(
+  `Trip Duration` ~ vehicle_type + `Trip Distance` + hour_f + dow_f + district_start_f,
+  data = trips_2019_nolog
+)
+```
+
+**② Raw model diagnostics**
+
+```{r, Diagnostics for raw model}
+
+## Check nonlinearity, heteroscedasticity, normality of raw model
+
+fitted_raw_dur <- fitted(model_raw_dur)
+resid_raw_dur  <- resid(model_raw_dur)
+
+# par(mfrow = c(2, 1))
+
+# Residual vs Fitted
+plot(fitted_raw_dur, resid_raw_dur,
+     xlab = "Fitted values", ylab = "Residuals",
+     main = "Residuals vs Fitted (raw Trip Duration)")
+abline(h = 0, lty = 2, col = "red")
+
+# QQ plot
+qqnorm(resid_raw_dur,
+       main = "Normal Q-Q Plot (raw Trip Duration)")
+qqline(resid_raw_dur, col = "red", lty = 2)
+
+```
+
+
+**③-1-Modeling & Diagnostics: Log transformed model**
+```{r, log transformed model diagnostics}
+################################################################################
+## Q2: Log transformed model for duration
+## Response: log_duration
+## Predictors: vehicle_type + log_distance + hour_f + dow_f + district_start_f
+################################################################################
+
+# Modeling Log transformed model (duration)
+model_log_dur <- lm(
+  log_duration ~ vehicle_type + log_distance + hour_f + dow_f + district_start_f,
+  data = trips_2019
+)
+
+# Residual vs Fitted
+plot(fitted(model_log_dur), resid(model_log_dur),
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted (log duration)")
+abline(h = 0, lty = 2, col = "red")
+
+# QQ plot
+qqnorm(resid(model_log_dur),
+       main = "Normal Q-Q Plot (log duration)")
+qqline(resid(model_log_dur), col = "red", lty = 2)
+```
+
+
+**③-2-Modeling & Diagnostics: Box-Cox model**
+```{r, Boxcox Diagnostics}
+################################################################################
+## Q2: Box-Cox model for duration
+################################################################################
+
+# Box-Cox for duration
+boxcox_lambda_dur <- boxcox(model_raw_dur, plotit = TRUE)
+
+lambda_hat_dur <- boxcox_lambda_dur$x[which.max(boxcox_lambda_dur$y)]
+lambda_hat_dur
+
+# Box-Cox transformed response for duration
+trips_2019_nolog$y_boxcox_dur <- if (abs(lambda_hat_dur) < 1e-3) {
+  log(trips_2019_nolog$`Trip Duration`)
+} else {
+  (trips_2019_nolog$`Trip Duration`^lambda_hat_dur - 1) / lambda_hat_dur
+}
+
+model_boxcox_dur <- lm(
+  y_boxcox_dur ~ vehicle_type + `Trip Distance` + hour_f + dow_f + district_start_f,
+  data = trips_2019_nolog
+)
+
+# Residual vs Fitted (Box-Cox duration)
+plot(fitted(model_boxcox_dur), resid(model_boxcox_dur),
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted (Box-Cox duration)")
+abline(h = 0, lty = 2, col = "red")
+
+# QQ plot
+qqnorm(resid(model_boxcox_dur),
+       main = "Normal Q-Q Plot (Box-Cox duration)")
+qqline(resid(model_boxcox_dur), col = "red", lty = 2)
+
+```
+
+**③-3-Modeling & Diagnostics: Weighted Least Square (WLS) model**
+```{r}
+################################################################################
+## Q2: WLS model for log_duration
+################################################################################
+
+# Fitted values & residuals from log-duration model
+f_hat_dur <- fitted(model_log_dur)
+e_hat_dur <- resid(model_log_dur)
+
+# Simple variance function: var(e) ∝ fitted^2  (same idea as distance)
+w_simple_dur <- 1 / (f_hat_dur^2 + 1e-8)
+
+model_wls_dur <- lm(
+  log_duration ~ vehicle_type + log_distance + hour_f + dow_f + district_start_f,
+  data    = trips_2019,
+  weights = w_simple_dur
+)
+
+# Residual vs Fitted (WLS duration)
+plot(fitted(model_wls_dur), resid(model_wls_dur),
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted (WLS duration)")
+abline(h = 0, lty = 2, col = "red")
+
+# QQ plot
+qqnorm(resid(model_wls_dur),
+       main = "Normal Q-Q Plot (WLS duration)")
+qqline(resid(model_wls_dur), col = "red", lty = 2)
+```
+
+
+**③-4-Modeling & Diagnostics: Huber model**
+```{r}
+################################################################################
+## Q2: Huber robust regression for log_duration
+################################################################################
+
+library(MASS)
+
+model_huber_dur <- rlm(
+  log_duration ~ vehicle_type + log_distance + hour_f + dow_f + district_start_f,
+  data = trips_2019
+)
+
+# Residual vs Fitted (Huber duration)
+plot(fitted(model_huber_dur), resid(model_huber_dur),
+     xlab = "Fitted values",
+     ylab = "Residuals (Huber)",
+     main = "Residuals vs Fitted (Huber, log duration)")
+abline(h = 0, col = "red", lty = 2)
+
+# QQ plot
+qqnorm(resid(model_huber_dur),
+       main = "Normal Q-Q Plot (Huber, log duration)")
+qqline(resid(model_huber_dur), col = "red", lty = 2)
+```
+
+
+**③-6 Check BIC for candidate models**
+```{r}
+################################################################################
+## Compare BIC of candidate models
+#  - model_raw_dur     : duration (raw)
+#  - model_log_dur     : log_duration
+#  - model_boxcox_dur  : box–Cox 
+#  - model_wls_dur     : WLS (log_duration)
+#  - model_huber_dur   : Huber (log_duration, rlm)
+################################################################################
+## BIC Comparison table
+info_dur <- data.frame(
+  Model = c("OLS_raw", "OLS_log", "BoxCox_log", "WLS_log", "Huber_log"),
+  BIC   = c(BIC(model_raw_dur),
+            BIC(model_log_dur),
+            BIC(model_boxcox_dur),
+            BIC(model_wls_dur),
+            BIC(model_huber_dur))
+)
+info_dur
+```
+
+**③-7 Compare Coefficient table (duration, scooter effect)**
+```{r}
+################################################################################
+## Q2: Compare vehicle_type coefficients across OLS / WLS / Huber (duration)
+################################################################################
+
+coef_table_dur <- data.frame(
+  Vehicle = c("bicycle (baseline)", "scooter"),
+  OLS     = c(0, coef(model_log_dur)["vehicle_typescooter"]),
+  BoxCox  = c(0, coef(model_boxcox_dur)["vehicle_typescooter"]),
+  WLS     = c(0, coef(model_wls_dur)["vehicle_typescooter"]),
+  Huber   = c(0, coef(model_huber_dur)["vehicle_typescooter"])
+)
+
+coef_table_dur
+```
+
+**④ Check Plausible Interaction models (optional candidates)**
+```{r, Check plausible interaction models}
+################################################################################
+# model_int1: log_duration ~ log_distance * vehicle_type + hour_f + dow_f + district_start_f
+# model_int2: log_duration ~ log_distance + vehicle_type * hour_f + dow_f + district_start_f
+# model_int3: log_duration ~ log_distance + hour_f + dow_f + vehicle_type * district_start_f
+################################################################################
+
+# Vehicle_type x log_distance
+model_int1 <- update(model_log_dur, . ~ . + vehicle_type:log_distance)
+
+# Vehicle_type x hour_f
+model_int2 <- update(model_log_dur, . ~ . + vehicle_type:hour_f)
+
+# Vehicle_type x district_start_f
+model_int3 <- update(model_log_dur, . ~ . + vehicle_type:district_start_f)
+
+info_dur_interaction <- data.frame(
+  Model = c("main_log", "Veh_dis_log", "Veh_hour_log", "Veh_district_log"),
+  BIC   = c(BIC(model_log_dur),
+            BIC(model_int1),
+            BIC(model_int2),
+            BIC(model_int3))
+)
+info_dur_interaction
+```
+
+**⑤ Fit log interaction model**
+```{r, fit log interaction model}
+################################################################################
+## Log duration model with interaction
+## Response : log_duration
+## Predictors : vehicle_type * log_distance + hour_f + dow_f + district_start_f
+################################################################################
+model_log_interaction <- lm(log_duration ~ vehicle_type * log_distance +
+    hour_f + dow_f + district_start_f, data = trips_2019)
+```
+
+
+**⑥ Fit log interaction model**
+```{r, log interaction model diagnostics}
+
+# Residual vs Fitted
+plot(fitted(model_log_interaction), resid(model_log_interaction),
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted (log duration, interaction model)")
+abline(h = 0, lty = 2, col = "red")
+
+# Q-Q plot
+qqnorm(resid(model_log_interaction),
+       main = "Normal Q-Q Plot (log duration, interaction model)")
+qqline(resid(model_log_interaction), col = "red", lty = 2)
+
+```
+
+**⑦ Check structure of log transformed model**
+```{r, Check structure of log transformed model}
+
+## partial residual plot
+partial_resid <- residuals(model_log_interaction) +
+                 coef(model_log_interaction)["log_distance"] * trips_2019$log_distance
+
+plot(trips_2019$log_distance, partial_resid,
+     xlab = "log_distance",
+     ylab = "Partial residuals for log_distance",
+     main = "Partial residual plot for log_distance",
+     pch = 16,
+     cex = 0.3,
+     col = adjustcolor("black", alpha.f = 0.2))
+abline(a = 0,
+       b = coef(model_log_interaction)["log_distance"],
+       lwd = 3, col ="red")
+lines(lowess(trips_2019$log_distance, partial_resid),lwd = 2, lty = 2, col = "blue")
+```
+
+**⑧ Model-based outlier, influencial point check**
+```{r}
+################################################################################
+## Q2: Check Model-based outliers & influential points (duration model)
+################################################################################
+
+## Number of observations and coefficients
+n_dur <- nrow(trips_2019)
+p_dur <- length(coef(model_log_interaction))
+alpha <- 0.05
+
+## Diagnostic measures
+student_dur <- rstudent(model_log_interaction)          # externally studentized residuals
+lev_dur     <- hatvalues(model_log_interaction)         # leverage (hat values)
+cook_dur    <- cooks.distance(model_log_interaction)    # Cook's distance
+
+## Cutoffs
+cutoff_student_dur <- qt(1 - alpha/(2*n_dur), df = model_log_interaction$df.residual)
+cutoff_lev_dur     <- 2 * (p_dur + 1) / n_dur
+cutoff_cook_dur    <- 4 / n_dur
+
+## Table of diagnostics
+diag_tbl_dur <- data.frame(
+  id            = 1:n_dur,
+  student       = student_dur,
+  leverage      = lev_dur,
+  cook          = cook_dur,
+  flag_student  = abs(student_dur) > cutoff_student_dur,
+  flag_leverage = lev_dur > cutoff_lev_dur,
+  flag_cook     = cook_dur > cutoff_cook_dur
+)
+
+diag_tbl_dur$flag_any <- with(diag_tbl_dur,
+                              flag_student | flag_leverage | flag_cook)
+
+suspects_dur <- subset(diag_tbl_dur, flag_any)
+suspects_dur[order(-suspects_dur$cook), ][1:20, ]
+```
+
+
+**⑨ Check Collinearity**
+```{r}
+################################################################################
+## Q2: Check collinearity (VIF) for duration model
+################################################################################
+
+library(car)
+vif(model_log_interaction)
+```
+
+
+**⑩ Log transformed model interpretation**
+```{r}
+################################################################################
+## Q2: Scooter vs Bicycle duration effect
+##     (1) Main-effects model: constant effect across distance
+##     (2) Interaction model: effect depends on log_distance via α1 + α3 x
+################################################################################
+
+# Summary of main-effects & interaction models
+summary(model_log_dur)          # main-effects
+summary(model_log_interaction)  # interaction
+
+# mean log_distance
+mean_log_dist <- mean(trips_2019$log_distance, na.rm = TRUE)
+
+# Scooter effects from main-effects model: Δ = α1
+coef_main <- coef(model_log_dur)
+a1_main   <- unname(coef_main["vehicle_typescooter"])
+
+delta_main <- a1_main
+ratio_main <- exp(delta_main)
+
+# Scooter effects from Interaction model: Δ(x) = α1 + α3 x
+coef_int <- coef(model_log_interaction)
+a1_int   <- unname(coef_int["vehicle_typescooter"])                 # α1
+a3_int   <- unname(coef_int["vehicle_typescooter:log_distance"])    # α3
+
+delta_int_at_mean <- a1_int + a3_int * mean_log_dist
+ratio_int_at_mean <- exp(delta_int_at_mean)
+
+# Table of results
+results_tbl <- data.frame(
+  Model = c("Main-effects (no interaction)",
+            "Interaction (vehicle_type × log_distance)"),
+  a1_scooter = c(a1_main, a1_int),
+  a3_interaction = c(NA, a3_int),
+  log_distance_used = c(NA, mean_log_dist),
+  delta_scooter_log = c(delta_main, delta_int_at_mean),
+  ratio_exp_delta = c(ratio_main, ratio_int_at_mean),
+  pct_diff = 100 * (c(ratio_main, ratio_int_at_mean) - 1)
+)
+
+
+results_tbl_round <- within(results_tbl, {
+  a1_scooter <- round(a1_scooter, 6)
+  a3_interaction <- round(a3_interaction, 6)
+  log_distance_used <- round(log_distance_used, 6)
+  delta_scooter_log <- round(delta_scooter_log, 6)
+  ratio_exp_delta <- round(ratio_exp_delta, 6)
+  pct_diff <- round(pct_diff, 3)
+})
+
+results_tbl_round
+
+```
+
+
+
+
+

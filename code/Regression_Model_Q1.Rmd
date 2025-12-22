@@ -1,0 +1,699 @@
+---
+title: "Regression Model(Q1)"
+author: "Donghyun Kim"
+date: "2025-12-06"
+output: html_document
+---
+
+```{css, echo=FALSE}
+body { font-size: 12px; line-height: 1.2; }
+
+/* 제목 크기 */
+h1.title, h1 { font-size: 18px; margin-bottom: .5em; }
+h2 { font-size: 14px; margin-top: .8em; margin-bottom: .4em; }
+h3 { font-size: 12px; }
+
+/* 문단/리스트 간격 */
+p { margin: .4em 0; }
+ul, ol { margin-top: .3em; margin-bottom: .3em; }
+
+/* 코드 블록/출력 */
+pre, code, pre code, .sourceCode pre {
+  font-size: 10px !important;
+  line-height: 1.25;
+}
+.sourceCode { max-height: 350px; overflow: auto; }
+
+/* 표/캡션 */
+table { font-size: 10px; }
+caption, .caption { font-size: 11px; }
+
+/* 이미지 기본 축소 */
+img { max-width: 90%; }
+
+/* 인쇄(PDF로 저장) 여백 줄이기 */
+@media print {
+  @page { margin: 12mm; }
+  body { -webkit-print-color-adjust: exact; }
+}```
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load packages
+
+```{r, load packages}
+# load packages
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(car)
+library(MASS)
+library(broom)
+```
+
+```{r, read data}
+trips_raw <- read_csv("https://data.austintexas.gov/api/views/7d8e-dm7r/rows.csv?accessType=DOWNLOAD")
+```
+
+# Preprocessing and EDA
+
+**① Preprocessing data**
+```{r, preprocessing1}
+################################################################################
+## Cleaning data
+# Filter for data of 2019 (year), get rid of NA's and negative values,
+# select essential predictors that will be utilized
+################################################################################
+
+trips_2019 <- trips_raw %>%
+  dplyr::filter(
+    `Year (US/Central)` == 2019,
+    `Vehicle Type` %in% c("bicycle", "scooter"),   
+    !is.na(`Trip Distance`),
+    !is.na(`Trip Duration`),
+    `Trip Distance` > 0,
+    `Trip Duration` > 0
+  ) %>%
+  dplyr::select(
+    `Vehicle Type`, `Trip Distance`, `Trip Duration`,
+    `Hour`, `Day of Week`, `Council District (Start)`
+  )
+
+
+saveRDS(trips_2019, "trips_2019.rds")
+
+```
+
+```{r, preprocessing2}
+################################################################################
+## Change predictors from characters to factors
+################################################################################
+trips_2019_nolog <- trips_2019 %>%
+  mutate(
+    vehicle_type = factor(`Vehicle Type`),
+    hour_f = factor(Hour),
+    dow_f = factor(`Day of Week`),
+    district_start_f = factor(`Council District (Start)`)
+  )
+
+saveRDS(trips_2019_nolog, "trips_2019_nolog.rds")
+```
+
+```{r, echo=FALSE}
+trips_2019 <- readRDS("trips_2019.rds")
+trips_2019_nolog <- readRDS("trips_2019_nolog.rds")
+```
+
+**② Raw EDA**
+```{r, 1st raw EDA}
+################################################################################
+## EDA of preprocessed raw data (no transformation applied)
+# The preprocessed dataset is large, so take a random subset and explore the data
+# Check predictor (vehicle type) with response (trip distance, trip duration)
+################################################################################
+
+# Create sample of 100,000
+set.seed(500)
+trips_sample_nolog <- trips_2019_nolog %>%
+  sample_n(100000)
+
+# Trip distance histogram
+dis_hist <-
+  ggplot(trips_sample_nolog, aes(x = `Trip Distance`)) +
+  geom_histogram(bins =100) +
+  labs(x = "Trip Distance (meters)", y = "Count", 
+       title = "Distribution of Trip Distance (raw)")
+
+# Trip duration histogram
+dur_hist <-
+  ggplot(trips_sample_nolog, aes(x = `Trip Duration`)) +
+  geom_histogram(bins = 100) +
+  labs(x = "Trip duration (seconds)", y = "Count",
+       title = "Distribution of Trip Duration (raw)")
+
+# boxplot (x:vehicle_type / y:log_distance)
+dis_box <-
+  ggplot(trips_sample_nolog, aes(x = vehicle_type, y = `Trip Distance`)) +
+  geom_boxplot() +
+  labs(x = "Vehicle type", y = "Trip distance (meters)",
+       title = "Trip Distance by Vehicle Type (raw)")
+
+# boxplot (x:vehicle_type / y:log_duration)
+dur_box <-
+  ggplot(trips_sample_nolog, aes(x = vehicle_type, y = `Trip Duration`)) +
+  geom_boxplot() +
+  labs(x = "Vehicle type", y = "Trip duration (seconds)",
+       title = "Trip Duration by Vehicle Type (raw)")
+
+grid.arrange(dis_hist, dur_hist, dis_box, dur_box, nrow=2, ncol=2)
+```
+
+```{r, additional 1st EDA}
+################################################################################
+## EDA of preprocessed raw data (no transformation applied)
+# Check other predictors with response predictor (trip distance, trip duration)
+################################################################################
+
+# boxplot (x:day of week / y:log_distance)
+dis_box_dof <-
+  ggplot(trips_sample_nolog, aes(x = dow_f, y = `Trip Distance`)) +
+  geom_boxplot() +
+  labs(x = "day of week", y = "Trip distance (meters)",
+       title = "Trip Distance by Day of Week (raw)")
+
+# boxplot (x:day of week / y:log_duration)
+dur_box_dof <-
+  ggplot(trips_sample_nolog, aes(x = dow_f, y = `Trip Duration`)) +
+  geom_boxplot() +
+  labs(x = "day of week", y = "Trip duration (seconds)",
+       title = "Trip Duration by Day of Week (raw)")
+
+# boxplot (x:hour / y:log_distance)
+dis_box_hour <-
+  ggplot(trips_sample_nolog, aes(x = hour_f, y = `Trip Distance`)) +
+  geom_boxplot() +
+  labs(x = "Hour", y = "Trip distance (meters)",
+       title = "Trip Distance by Hours (raw)")
+
+# boxplot (x:hour / y:log_duration)
+dur_box_hour <- ggplot(trips_sample_nolog, aes(x = hour_f, y = `Trip Duration`)) +
+  geom_boxplot() +
+  labs(x = "Hour", y = "Trip duration (seconds)",
+       title = "Trip Duration by Hours (raw)")
+
+# boxplot (x: Council District (Start) / y:log_distance)
+dis_box_district <-
+  ggplot(trips_sample_nolog, aes(x = district_start_f, y = `Trip Distance`)) +
+  geom_boxplot() +
+  labs(x = "Council District (Start)", y = "Trip distance (meters)",
+       title = "Trip Distance by Council District (raw)")
+
+# boxplot (x: Council District (Start) / y:log_duration)
+dur_box_district <-
+  ggplot(trips_sample_nolog, aes(x = district_start_f, y = `Trip Duration`)) +
+  geom_boxplot() +
+  labs(x = "Council District (Start)", y = "Trip duration (seconds)",
+       title = "Trip Duration by Council District (raw)")
+
+grid.arrange(dis_box_dof, dur_box_dof, dis_box_hour, dur_box_hour, dis_box_district, dur_box_district, nrow=3, ncol=2)
+```
+
+**③ Distribution-based outlier removal (IQR rule)**
+```{r, Calculate IQR}
+################################################################################
+## Calculate IQR 
+# 1.5IQR for checking potential outliers, 3IQR for extreme outliers
+################################################################################
+
+# Trip Distance(d),  Trip Duration(t)
+qd <- quantile(trips_2019$`Trip Distance`, probs = c(0.25, 0.75), na.rm = TRUE)
+IQR_d <- qd[2] - qd[1]
+
+qt <- quantile(trips_2019$`Trip Duration`, probs = c(0.25, 0.75), na.rm = TRUE)
+IQR_t <- qt[2] - qt[1]
+
+# 1.5*IQR standard (for potential outliers)
+lower_d_1_5 <- qd[1] - 1.5 * IQR_d
+upper_d_1_5 <- qd[2] + 1.5 * IQR_d
+lower_t_1_5 <- qt[1] - 1.5 * IQR_t
+upper_t_1_5 <- qt[2] + 1.5 * IQR_t
+
+# 3*IQR standard (for extreme outliers)
+lower_d_3 <- qd[1] - 3 * IQR_d
+upper_d_3 <- qd[2] + 3 * IQR_d
+lower_t_3 <- qt[1] - 3 * IQR_t
+upper_t_3 <- qt[2] + 3 * IQR_t
+
+# Distance must be positive(cutoff > 0)
+lower_d_1_5 <- max(lower_d_1_5, 0)
+lower_d_3   <- max(lower_d_3, 0)
+lower_t_1_5 <- max(lower_t_1_5, 0)
+lower_t_3   <- max(lower_t_3, 0)
+
+qd; qt
+IQR_d; IQR_t
+lower_d_1_5; upper_d_1_5
+lower_d_3;   upper_d_3
+lower_t_1_5; upper_t_1_5
+lower_t_3;   upper_t_3
+
+outlier_table <- data.frame(
+  Measure   = c("Trip Distance", "Trip Duration"),
+  Q1        = c(unname(qd[1]), unname(qt[1])),
+  Q3        = c(unname(qd[2]), unname(qt[2])),
+  IQR       = c(unname(IQR_d), unname(IQR_t)),
+  Lower_1_5 = c(unname(lower_d_1_5), unname(lower_t_1_5)),
+  Upper_1_5 = c(unname(upper_d_1_5), unname(upper_t_1_5)),
+  Lower_3   = c(unname(lower_d_3),   unname(lower_t_3)),
+  Upper_3   = c(unname(upper_d_3),   unname(upper_t_3)),
+  check.names = FALSE
+)
+
+outlier_table
+```
+
+```{r, remove outlier by 3 X IQR}
+
+## Remove extreme outliers by 3*IQR
+trips_2019_nolog <- trips_2019_nolog %>%
+  filter(
+    `Trip Distance` >= lower_d_3,
+    `Trip Distance` <= upper_d_3,
+    `Trip Duration` >= lower_t_3,
+    `Trip Duration` <= upper_t_3
+  )
+
+trips_2019_nolog %>%
+  summarise(
+    n          = n(),
+    mean_dist  = mean(`Trip Distance`),
+    median_dist= median(`Trip Distance`),
+    max_dist   = max(`Trip Distance`),
+    mean_dur   = mean(`Trip Duration`),
+    median_dur = median(`Trip Duration`),
+    max_dur    = max(`Trip Duration`)
+  )
+
+saveRDS(trips_2019_nolog, "trips_2019_nolog.rds")
+```
+
+**④ Raw data EDA without outliers (IQR)**
+```{r, Raw data EDA without outliers (IQR)}
+################################################################################
+## Remove extreme outliers by 3*IQR and check dataset
+################################################################################
+
+# Create sample of 100,000
+set.seed(500)
+trips_sample_nolog <- trips_2019_nolog %>%
+  sample_n(100000)
+
+# Trip distance histogram
+dis_hist <-
+  ggplot(trips_sample_nolog, aes(x = `Trip Distance`)) +
+  geom_histogram(bins =100) +
+  labs(x = "Trip Distance (meters)", y = "Count", 
+       title = "Distribution of Trip Distance (raw)")
+
+# Trip duration histogram
+dur_hist <-
+  ggplot(trips_sample_nolog, aes(x = `Trip Duration`)) +
+  geom_histogram(bins = 100) +
+  labs(x = "Trip duration (seconds)", y = "Count",
+       title = "Distribution of Trip Duration (raw)")
+
+# boxplot (x:vehicle_type / y:log_distance)
+dis_box <-
+  ggplot(trips_sample_nolog, aes(x = vehicle_type, y = `Trip Distance`)) +
+  geom_boxplot() +
+  labs(x = "Vehicle type", y = "Trip distance (meters)",
+       title = "Trip Distance by Vehicle Type (raw)")
+
+# boxplot (x:vehicle_type / y:log_duration)
+dur_box <-
+  ggplot(trips_sample_nolog, aes(x = vehicle_type, y = `Trip Duration`)) +
+  geom_boxplot() +
+  labs(x = "Vehicle type", y = "Trip duration (seconds)",
+       title = "Trip Duration by Vehicle Type (raw)")
+
+grid.arrange(dis_hist, dur_hist, dis_box, dur_box, nrow=2, ncol=2)
+```
+
+# Question 1.
+
+**① Raw model**
+```{r, raw model with no transformation}
+
+## Check raw model results with no transformation
+model_raw_dis <- lm(`Trip Distance` ~ vehicle_type + hour_f + dow_f + district_start_f, data=trips_2019_nolog)
+summary(model_raw_dis)
+```
+
+**② Raw model diagnostics**
+```{r, Diagnostics for raw model}
+
+## Check nonlinearity, heteroscedasticity, normality of raw model
+
+fitted_raw_dis <- fitted(model_raw_dis)
+resid_raw_dis  <- resid(model_raw_dis)
+
+# par(mfrow = c(2, 1))
+
+# Residual vs Fitted
+plot(fitted_raw_dis, resid_raw_dis,
+     xlab = "Fitted values", ylab = "Residuals",
+     main = "Residuals vs Fitted (raw Trip Distance)")
+abline(h = 0, lty = 2, col = "red")
+
+# QQ plot
+qqnorm(resid_raw_dis,
+       main = "Normal Q-Q Plot (raw Trip Distance)")
+qqline(resid_raw_dis, col = "red", lty = 2)
+
+```
+
+**③-1-Log transformation of response variables**
+```{r, log-transform response variables}
+################################################################################
+# In order to overcome nonlinearity, heteroscedasticity, normality 
+# try log transformation
+################################################################################
+
+## Mutate log-transform response (distance & duration)
+trips_2019 <- trips_2019_nolog %>%
+  mutate(
+    log_distance = log(`Trip Distance`),
+    log_duration = log(`Trip Duration`)
+  )
+
+saveRDS(trips_2019, "trips_2019.rds")
+```
+
+**③-1-EDA: Exploration of Data (Log transformed)**
+```{r, 2nd EDA}
+# Create sample of 100,000
+set.seed(500)
+trips_sample_log <- trips_2019 %>%
+  sample_n(100000)
+
+# log distance histogram
+dis_hist_log <- 
+  ggplot(trips_sample_log, aes(x = log_distance)) +
+  geom_histogram(bins = 100) +
+  labs(x = "log(Trip distance)", y = "Count",
+       title = "Distribution of log(Trip Distance)")
+
+# log duration histogram
+dur_hist_log <- 
+  ggplot(trips_sample_log, aes(x = log_duration)) +
+  geom_histogram(bins = 100) +
+  labs(x = "log(Trip duration)", y = "Count",
+       title = "Distribution of log(Trip Duration)")
+
+# boxplot (x:vehicle_type / y:log_distance)
+dis_box_log <- 
+  ggplot(trips_sample_log, aes(x = vehicle_type, y = log_distance)) +
+  geom_boxplot() +
+  labs(x = "Vehicle type", y = "log(Trip distance)",
+       title = "log(Trip Distance) by Vehicle Type")
+
+# boxplot (x:vehicle_type / y:log_duration)
+dur_box_log <- 
+  ggplot(trips_sample_log, aes(x = vehicle_type, y = log_duration)) +
+  geom_boxplot() +
+  labs(x = "Vehicle type", y = "log(Trip duration)",
+       title = "log(Trip Duration) by Vehicle Type")
+
+
+grid.arrange(dis_hist_log, dur_hist_log, dis_box_log, dur_box_log, nrow=2, ncol=2)
+```
+
+```{r, additional 2nd EDA}
+# boxplot (x:day of week / y:log_distance)
+dis_box_dof_log <-
+  ggplot(trips_sample_log, aes(x = dow_f, y = log_distance)) +
+  geom_boxplot() +
+  labs(x = "day of week", y = "Trip distance (meters)",
+       title = "Trip Distance by Day of Week")
+
+# boxplot (x:day of week / y:log_duration)
+dur_box_dof_log <-
+  ggplot(trips_sample_log, aes(x = dow_f, y = log_duration)) +
+  geom_boxplot() +
+  labs(x = "day of week", y = "Trip duration (seconds)",
+       title = "Trip Duration by Day of Week")
+
+# boxplot (x:hour / y:log_distance)
+dis_box_hour_log <-
+  ggplot(trips_sample_log, aes(x = hour_f, y = log_distance)) +
+  geom_boxplot() +
+  labs(x = "Hour", y = "Trip distance (meters)",
+       title = "Trip Distance by Hours")
+
+# boxplot (x:hour / y:log_duration)
+dur_box_hour_log <-
+  ggplot(trips_sample_log, aes(x = hour_f, y = log_duration)) +
+  geom_boxplot() +
+  labs(x = "Hour", y = "Trip duration (seconds)",
+       title = "Trip Duration by Hours")
+
+# boxplot (x: Council District (Start) / y:log_distance)
+dis_box_district_log <-
+  ggplot(trips_sample_log, aes(x = district_start_f, y = log_distance)) +
+  geom_boxplot() +
+  labs(x = "Council District (Start)", y = "Trip distance (meters)",
+       title = "Trip Distance by Council District")
+
+# boxplot (x: Council District (Start) / y:log_duration)
+dur_box_district_log <-
+  ggplot(trips_sample_log, aes(x = district_start_f, y = log_duration)) +
+  geom_boxplot() +
+  labs(x = "Council District (Start)", y = "Trip duration (seconds)",
+       title = "Trip Duration by Council District")
+
+grid.arrange(dis_box_dof_log, dur_box_dof_log, dis_box_hour_log, dur_box_hour_log, dis_box_district_log, dur_box_district_log, nrow=3, ncol=2)
+```
+
+**③-1-Modeling & Diagnostics: Log transformed model**
+```{r, log transformed model diagnostics}
+################################################################################
+## Log transformed Model
+# ⓐModeling  ⓑDiagnose
+################################################################################
+
+# Modeling Log transformed model
+model_log_dis <- lm(log_distance ~ vehicle_type + hour_f + dow_f + district_start_f,
+                data = trips_2019)
+
+# Residual vs Fitted
+plot(fitted(model_log_dis), resid(model_log_dis),
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted (log distance)")
+abline(h = 0, lty = 2, col = "red")
+
+# QQ plot
+qqnorm(resid(model_log_dis),
+       main = "Normal Q-Q Plot (log distance)")
+qqline(resid(model_log_dis), col = "red", lty = 2)
+```
+
+**③-2-Modeling & Diagnostics: Box-Cox model**
+```{r, Boxcox Diagnostics}
+################################################################################
+## Boxcox Model
+# ⓐModeling  ⓑDiagnose
+################################################################################
+
+# Modeling Boxcox
+boxcox_lamda_dis <- boxcox(model_raw_dis, plotit = TRUE)
+
+lambda_hat_dis <- boxcox_lamda_dis$x[which.max(boxcox_lamda_dis$y)]
+lambda_hat_dis
+
+trips_2019_nolog$y_boxcox_dis <- if (abs(lambda_hat_dis) < 1e-3) {
+  log(trips_2019_nolog$`Trip Distance`)
+} else {
+  (trips_2019_nolog$`Trip Distance`^lambda_hat_dis - 1) / lambda_hat_dis
+}
+
+model_boxcox_dis <- lm(y_boxcox_dis ~ vehicle_type + hour_f + dow_f + district_start_f,
+               data = trips_2019_nolog)
+
+
+# Residual vs Fitted
+# par(mfrow = c(2,1))
+plot(fitted(model_boxcox_dis), resid(model_boxcox_dis),
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted (boxcox distance)")
+abline(h = 0, lty = 2, col = "red")
+
+# QQ plot
+qqnorm(resid(model_boxcox_dis),
+       main = "Normal Q-Q Plot (boxcox distance)")
+qqline(resid(model_boxcox_dis), col = "red", lty = 2)
+
+```
+
+**③-3-Modeling & Diagnostics: Weighted Least Square (WLS) model**
+```{r, WLS Diagnostics}
+################################################################################
+## WLS Model
+# ⓐModeling  ⓑDiagnose
+################################################################################
+
+# Modeling WLS
+f_hat <- fitted(model_log_dis)
+e_hat <- resid(model_log_dis)
+
+w_simple <- 1 / (f_hat^2 + 1e-8)
+
+model_wls_dis <- lm(log_distance ~ vehicle_type + hour_f + dow_f + district_start_f,
+                  data    = trips_2019,
+                  weights = w_simple)
+
+
+# Residual vs Fitted
+# par(mfrow = c(2,1))
+plot(fitted(model_wls_dis), resid(model_wls_dis),
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted (WLS distance)")
+abline(h = 0, lty = 2, col = "red")
+
+# QQ plot
+qqnorm(resid(model_wls_dis),
+       main = "Normal Q-Q Plot (WLS distance)")
+qqline(na.omit(resid(model_wls_dis)), col = "red", lty = 2)
+```
+
+**③-4-Modeling & Diagnostics: Huber model**
+```{r}
+################################################################################
+## Huber Model
+# ⓐModeling  ⓑDiagnose
+################################################################################
+
+# Modeling Huber
+model_huber_dis <- rlm(log_distance ~ vehicle_type + hour_f + dow_f + district_start_f,
+                   data = trips_2019)
+
+# Residual vs Fitted
+plot(fitted(model_huber_dis), resid(model_huber_dis),
+     xlab = "Fitted values", ylab = "Residuals (Huber)",
+     main = "Residuals vs Fitted (Huber distance)")
+abline(h = 0, col = "red", lty = 2)
+
+# QQ plot
+qqnorm(resid(model_huber_dis),
+       main = "Normal Q-Q Plot (Huber distance)")
+qqline(resid(model_huber_dis), col = "red", lty = 2)
+```
+
+**③-5 Check BIC for candidate models**
+```{r}
+################################################################################
+## Compare BIC of candidate models
+#  - model_raw_dis     : distance (raw)
+#  - model_log_dis     : log_distance
+#  - model_boxcox_dis  : box–Cox 
+#  - model_wls_dis     : WLS (log_distance)
+#  - model_huber_dis   : Huber (log_distance, rlm)
+################################################################################
+
+## BIC Comparison table
+info_dis <- data.frame(
+  Model = c("OLS_raw", "OLS_log", "BoxCox_log", "WLS_log", "Huber_log"),
+  BIC   = c(BIC(model_raw_dis),
+            BIC(model_log_dis),
+            BIC(model_boxcox_dis),
+            BIC(model_wls_dis),
+            BIC(model_huber_dis))
+)
+info_dis
+```
+
+**③-6 Compare Coefficient table**
+```{r}
+# Compare vehicle_type coefficients
+coef_table_dis <- data.frame(
+  Vehicle = c("bicycle (baseline)", "scooter"),
+  OLS     = c(0, coef(model_log_dis)["vehicle_typescooter"]),
+  Boxcox  = c(0, coef(model_boxcox_dis)["vehicle_typescooter"]),
+  WLS     = c(0, coef(model_wls_dis)["vehicle_typescooter"]),
+  Huber   = c(0, coef(model_huber_dis)["vehicle_typescooter"])
+)
+
+coef_table_dis
+
+```
+
+**④ Model-based outlier, influencial point check**
+```{r, Check Model-based outliers & influencial points}
+################################################################################
+## Check Model-based outliers & influencial points
+# Apply studentized residuals, leverage, Cook's Distance
+################################################################################
+
+## Define numbers of observations and coefficients
+n_dis <- nrow(trips_2019)              
+p_dis <- length(coef(model_log_dis))   
+alpha <- 0.05
+
+
+## Calculate Diagnostic measures
+student_dis <- rstudent(model_log_dis)       # externally studentized residuals
+lev_dis     <- hatvalues(model_log_dis)      # leverage (hat values)
+cook_dis    <- cooks.distance(model_log_dis) # Cook's distance
+
+
+## Set Cutoff
+# studentized residual Bonferroni cutoff
+cutoff_student_dis <- qt(1 - alpha/(2*n_dis), df = model_log_dis$df.residual)
+
+# leverage rule of thumb: 2*(p+1)/n 
+cutoff_lev_dis <- 2 * (p_dis + 1) / n_dis
+
+# Cook's distance rule of thumb: 4/n
+cutoff_cook_dis <- 4 / n_dis
+
+
+## Visualize results as a Table
+diag_tbl_dis <- data.frame(
+  id            = 1:n_dis,
+  student       = student_dis,
+  leverage      = lev_dis,
+  cook          = cook_dis,
+  flag_student  = abs(student_dis) > cutoff_student_dis,
+  flag_leverage = lev_dis > cutoff_lev_dis,
+  flag_cook     = cook_dis > cutoff_cook_dis
+)
+
+# filtering only the points that might need to be considered
+diag_tbl_dis$flag_any <- with(diag_tbl_dis,
+                          flag_student | flag_leverage | flag_cook)
+suspects_dis <- subset(diag_tbl_dis, flag_any)
+suspects_dis[order(-suspects_dis$cook), ][1:20, ]
+
+```
+
+
+
+**⑤ Check Collinearity**
+```{r, check collinearity (VIF)}
+vif(model_log_dis)
+```
+
+
+**⑥ Log transformed model interpretation**
+```{r}
+################################################################################
+## Q1: scooter effect summary table (log-distance model)
+################################################################################
+summary(model_log_dis)
+
+q1_scooter_tab <- tidy(model_log_dis) %>%
+  filter(term == "vehicle_typescooter") %>%
+  transmute(
+    term = "Scooter (vs bicycle)",
+    estimate = estimate,
+    std_error = std.error,
+    ratio = exp(estimate),
+    pct_change = 100 * (exp(estimate) - 1)
+  )
+
+q1_scooter_tab
+
+```
+
+
+
+
+
