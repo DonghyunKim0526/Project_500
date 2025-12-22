@@ -56,10 +56,10 @@ All analysis was conducted in R.
 
 ## Repository Structure
 ```
+├── appendix/ # EDA and diagnostic checks
 ├── code/ # R scripts for data cleaning and modeling
 ├── figures/ # Generated plots
 ├── report/ # Final report (PDF)
-├── appendix/ # EDA and diagnostic checks
 └── README.md
 ```
 
