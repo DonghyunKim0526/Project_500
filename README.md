@@ -36,8 +36,8 @@ and spatial factors such as time of day, day of week, and city council districts
 - Differences persist after controlling for time and location effects.
 - Results are descriptive and observational; no causal claims are made.
 
-![Results for Question1](Q1_results.jpg)
-![Results for Question2](Q2_results.jpg)
+![distance](Q1_results.jpg)
+![duration](Q2_results.jpg)
 
 ## How to Reproduce
 
