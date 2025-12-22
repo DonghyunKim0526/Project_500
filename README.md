@@ -5,7 +5,7 @@ This project analyzes trip distance and duration patterns in Austin’s shared m
 (e-scooters and bikes) using 2019 public data. The goal is to understand how usage patterns differ
 by vehicle type, time, and location through exploratory data analysis and regression modeling.
 
-This project was completed as a final project for STATS 500 (Applied Statistics) at the University of Michigan.
+![Trip distance distribution](figures/your_figure_name.png)
 
 ## Research Question
 How do trip distance and duration differ between scooters and bikes, after accounting for temporal
@@ -35,18 +35,30 @@ and spatial factors such as time of day, day of week, and city council districts
 - Differences persist after controlling for time and location effects.
 - Results are descriptive and observational; no causal claims are made.
 
+## How to Reproduce
+
+1. Download the Austin Shared Micromobility dataset from the Austin Open Data Portal.
+2. Run the R scripts in the following order:
+   - `code/01_data_cleaning.R`
+   - `code/02_eda.R`
+   - `code/03_regression_models.R`
+3. Generated figures and tables will be saved to the `figures/` directory.
+
+
 ## Reproducibility
 All analysis was conducted in R.
 - Data preprocessing, analysis, and visualization scripts are provided in this repository.
 - Results can be reproduced by running the scripts in the specified order (see Repository Structure).
 
 ## Repository Structure
+```
 ├── data/ # Raw and processed datasets (or instructions to obtain them)
 ├── code/ # R scripts for data cleaning and modeling
 ├── figures/ # Generated plots
 ├── report/ # Final report (PDF)
 ├── appendix/ # EDA and diagnostic checks
 └── README.md
+```
 
 ## Notes
 - This analysis focuses on descriptive patterns and associations.
