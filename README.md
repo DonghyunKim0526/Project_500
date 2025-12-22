@@ -37,6 +37,7 @@ and spatial factors such as time of day, day of week, and city council districts
 - Results are descriptive and observational; no causal claims are made.
 
 ![distance](Q1_results.jpg)
+
 ![duration](Q2_results.jpg)
 
 ## How to Reproduce
