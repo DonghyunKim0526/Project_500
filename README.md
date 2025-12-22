@@ -5,8 +5,6 @@ This project analyzes trip distance and duration patterns in Austin’s shared m
 (e-scooters and bikes) using 2019 public data. The goal is to understand how usage patterns differ
 by vehicle type, time, and location through exploratory data analysis and regression modeling.
 
-![Trip distance distribution](figures/your_figure_name.png)
-
 ## Research Question
 How do trip distance and duration differ between scooters and bikes, after accounting for temporal
 and spatial factors such as time of day, day of week, and city council districts?
@@ -22,6 +20,9 @@ and spatial factors such as time of day, day of week, and city council districts
   - Time of day, day of week
   - City council district
 
+![EDA](figures/EDA/log_model_EDA1.jpg)
+
+
 ## Methodology
 - Cleaned and filtered raw trip-level data to remove implausible values and ensure consistency.
 - Conducted exploratory data analysis (EDA) to examine distributions and relationships among key variables.
@@ -34,6 +35,9 @@ and spatial factors such as time of day, day of week, and city council districts
 - Scooter trips are generally shorter in distance and duration than bike trips.
 - Differences persist after controlling for time and location effects.
 - Results are descriptive and observational; no causal claims are made.
+
+![Results for Question1](Q1_results.jpg)
+![Results for Question2](Q2_results.jpg)
 
 ## How to Reproduce
 
