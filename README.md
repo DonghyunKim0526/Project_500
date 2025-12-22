@@ -6,7 +6,7 @@ This project analyzes trip distance and duration patterns in Austin’s shared m
 by vehicle type, time, and location through exploratory data analysis and regression modeling.
 
 ## Research Question
-How do trip distance and duration differ between scooters and bikes, after accounting for temporal
+How do trip distance(Q1) and duration(Q2) differ between scooters and bikes, after accounting for temporal
 and spatial factors such as time of day, day of week, and city council districts?
 
 ## Data
@@ -36,9 +36,9 @@ and spatial factors such as time of day, day of week, and city council districts
 - Differences persist after controlling for time and location effects.
 - Results are descriptive and observational; no causal claims are made.
 
-![distance](Q1_results.jpg)
+![Results for Question1](figures/distance/Q1_results.jpg)
 
-![duration](Q2_results.jpg)
+![Results for Question2](figures/duration/Q2_results.jpg)
 
 ## How to Reproduce
 
