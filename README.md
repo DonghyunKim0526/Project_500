@@ -45,7 +45,7 @@ and spatial factors such as time of day, day of week, and city council districts
 1. Download the Austin Shared Micromobility dataset from the Austin Open Data Portal.
 2. Run the R scripts in the following order:
    - `code/Regression Model(Q1).R`
-   - `code/Regression Model(Q1).R`
+   - `code/Regression Model(Q2).R`
 3. Generated figures and tables will be saved to the `figures/` directory.
 
 
@@ -56,7 +56,6 @@ All analysis was conducted in R.
 
 ## Repository Structure
 ```
-├── data/ # Raw and processed datasets (or instructions to obtain them)
 ├── code/ # R scripts for data cleaning and modeling
 ├── figures/ # Generated plots
 ├── report/ # Final report (PDF)
